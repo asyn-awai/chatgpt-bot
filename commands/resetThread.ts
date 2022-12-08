@@ -6,7 +6,7 @@ import {
 	SlashCommandUserOption,
 } from "discord.js";
 
-import { User } from "../models";
+import { User } from "../models.js";
 
 export const command = {
 	data: new SlashCommandBuilder()

@@ -6,13 +6,15 @@ import DiscordJS, {
 	CommandInteraction,
 	SlashCommandBuilder,
 	InteractionType,
+    ActivityType
 } from "discord.js";
 import { REST } from "@discordjs/rest";
 import { Routes } from "discord-api-types/v9";
 import fs from "fs";
 import dotenv from "dotenv";
-import { dbConnect } from "./helpers";
 dotenv.config();
+import { dbConnect } from "./helpers.js";
+import { ChatGPTAPI } from "chatgpt"
 
 interface Command {
 	data: SlashCommandBuilder;
@@ -50,6 +52,8 @@ client.once("ready", async () => {
 		return;
 	}
 
+    client.user.setActivity('🥧π.🐍', { type: ActivityType.Playing })
+    
 	const CLIENT_ID = client.user.id;
 
 	const rest = new REST({

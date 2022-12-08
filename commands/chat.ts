@@ -6,9 +6,9 @@ import {
 	SlashCommandUserOption,
 } from "discord.js";
 
-import { User } from "../models";
+import { User } from "../models.js";
 import axios from "axios";
-import Chatbot from "../chatbot";
+import { ChatGPTAPI } from "chatgpt";
 
 export const command = {
 	data: new SlashCommandBuilder()
@@ -31,48 +31,73 @@ export const command = {
 				parentId: "none",
 			});
 		}
-		const bot = new Chatbot(
-			{
-				Authorization: process.env.AUTHORIZATION!,
-				SessionToken: process.env.SESSION_TOKEN!,
-			},
-			user.conversationId === "none" ? null : user.conversationId,
-			user.parentId === "none" ? null : user.parentId
-		);
 
-		const timeStart = performance.now();
-		await bot.refreshSession();
-		// const res = await axios
-		// 	.get(`http://localhost:3000/chat?q=${message}`)
-		// 	.catch(console.error);
-		const res = await bot.getChatResponse(message);
-		const timeEnd = performance.now();
-		const timeElapsed = ((timeEnd - timeStart) / 1000).toFixed(2);
-
-		if (!res || typeof res === "string")
+		const api = new ChatGPTAPI({
+			sessionToken: process.env.SESSION_TOKEN!,
+		});
+		try {
+			await api.ensureAuth();
+		} catch (err) {
 			return await interaction.editReply({
 				embeds: [
 					new EmbedBuilder()
-						.setTitle(`Something went wrong (${timeElapsed}ms)`)
-						.setDescription(res)
+						.setTitle("An Error Occurred")
+						.setDescription(
+							`Session token expired <:blue_surprised:965626683317178458>${"<:blue_cry:958448874593329172>".repeat(
+								2
+							)}`
+						)
 						.setColor("#ff0000"),
 				],
 			});
-
-		user.conversationId = res.conversationId ?? "none";
-		user.parentId = res.parentId ?? "none";
+		}
+		const conversation = api.getConversation({
+			conversationId:
+				user.conversationId === "none"
+					? undefined
+					: user.conversationId,
+			parentMessageId:
+				user.parentId === "none" ? undefined : user.parentId,
+		});
+		const timeStart = performance.now();
+		let res: string;
+		try {
+			res = await conversation.sendMessage(message, {
+				timeoutMs: 2 * 60 * 1000,
+			});
+		} catch (rawError) {
+			const err = rawError as string;
+			console.error(err);
+			return await interaction.editReply({
+				embeds: [
+					new EmbedBuilder()
+						.setTitle("An Error Occurred")
+						.setDescription(err)
+						.setColor("#ff0000"),
+				],
+			});
+		}
+		const timeEnd = performance.now();
+		const timeElapsed = ((timeEnd - timeStart) / 1000).toFixed(2);
+		const { conversationId, parentMessageId } = conversation;
+		user.conversationId = conversationId ?? "none";
+		user.parentId = parentMessageId ?? "none";
 		await user.save();
 		try {
-			console.log(res.message);
+			console.log(res);
+			console.log();
 			// split message into chunks of 1024 characters
-			const chunks = splitText(res.message, 1024);
-			console.log(chunks);
+			const chunks = splitText(res, 1024);
+			// console.log(chunks);
 			const embed = new EmbedBuilder()
 				.setTitle(interaction.options.getString("message")!)
 				.addFields(
 					chunks.map((chunk, index) => {
 						return {
-							name: index === 0 ? "Response" : "\u200b",
+							name:
+								index === 0
+									? `Response (${timeElapsed}ms)`
+									: "\u200b",
 							value: chunk,
 						} as APIEmbedField;
 					})
@@ -81,6 +106,7 @@ export const command = {
 			await interaction.editReply({ embeds: [embed] });
 		} catch (e) {
 			console.error(e);
+			console.log();
 			await interaction.editReply({
 				embeds: [
 					new EmbedBuilder()
@@ -95,15 +121,15 @@ export const command = {
 const splitText = (text: string, limit: number) => {
 	var lines = [];
 
-    let codeSectionClosed = true;
+	let codeSectionClosed = true;
 	while (text.length > limit) {
 		var chunk = text.substring(0, limit);
 		var lastWhiteSpace = chunk.lastIndexOf(" ");
 
 		if (lastWhiteSpace !== -1) limit = lastWhiteSpace;
-        /**
-         * @TODO fix code section splitting
-         */
+		/**
+		 * @TODO fix code section splitting
+		 */
 		lines.push(chunk.substring(0, limit));
 		text = text.substring(limit + 1);
 	}

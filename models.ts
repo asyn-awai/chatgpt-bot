@@ -14,3 +14,4 @@ const userSchema = new Schema({
 });
 
 export const User = model<IUser>("conversations", userSchema);
+// User.collection.dropIndexes(console.log)
